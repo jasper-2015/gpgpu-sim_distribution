@@ -101,6 +101,8 @@ class thread_ctx_t {
 
 class shd_warp_t {
  public:
+  std::bitset<MAX_WARP_SIZE> m_active_threads;
+
   shd_warp_t(class shader_core_ctx *shader, unsigned warp_size)
       : m_shader(shader), m_warp_size(warp_size) {
     m_stores_outstanding = 0;
@@ -255,7 +257,6 @@ class shd_warp_t {
 
   address_type m_next_pc;
   unsigned n_completed;  // number of threads in warp completed
-  std::bitset<MAX_WARP_SIZE> m_active_threads;
 
   bool m_imiss_pending;
 
