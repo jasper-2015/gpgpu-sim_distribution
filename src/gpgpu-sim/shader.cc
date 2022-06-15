@@ -1028,6 +1028,11 @@ void exec_shader_core_ctx::func_exec_inst(warp_inst_t &inst) {
   }
 }
 
+bool shader_core_ctx::has_register_space(const warp_inst_t *next_inst, unsigned warp_id) {
+  printf("has_register_space parent is called!\n");
+  return true;
+}
+
 void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
                                  const warp_inst_t *next_inst,
                                  const active_mask_t &active_mask,
@@ -1419,7 +1424,8 @@ void scheduler_unit::cycle() {
               } else if ((pI->op >= SPEC_UNIT_START_ID) &&
                          !(diff_exec_units &&
                            previous_issued_inst_exec_type ==
-                               exec_unit_type_t::SPECIALIZED)) {
+                               exec_unit_type_t::SPECIALIZED) &&
+                          m_shader->has_register_space(pI, warp_id)) {
                 unsigned spec_id = pI->op - SPEC_UNIT_START_ID;
                 assert(spec_id < m_shader->m_config->m_specialized_unit.size());
                 register_set *spec_reg_set = m_spec_cores_out[spec_id];

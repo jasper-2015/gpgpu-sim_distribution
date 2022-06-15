@@ -2387,6 +2387,8 @@ class shader_core_ctx : public core_t {
                                              unsigned tid) = 0;
   virtual void func_exec_inst(warp_inst_t &inst) = 0;
 
+  virtual bool has_register_space(const warp_inst_t *pI, unsigned warp_id);
+
   virtual unsigned sim_init_thread(kernel_info_t &kernel,
                                    ptx_thread_info **thread_info, int sid,
                                    unsigned tid, unsigned threads_left,
