@@ -367,7 +367,7 @@ class scheduler_unit {  // this can be copied freely, so can be used in std
   // all the derived schedulers.  The scheduler's behaviour can be
   // modified by changing the contents of the m_next_cycle_prioritized_warps
   // list.
-  void cycle();
+  void cycle(unsigned long long curr_cycle);
 
   // These are some common ordering fucntions that the
   // higher order schedulers can take advantage of
@@ -2387,7 +2387,7 @@ class shader_core_ctx : public core_t {
                                              unsigned tid) = 0;
   virtual void func_exec_inst(warp_inst_t &inst) = 0;
 
-  virtual bool has_register_space(const warp_inst_t *pI, unsigned warp_id);
+  virtual bool has_register_space(const warp_inst_t *pI, unsigned warp_id, unsigned long long curr_cycle);
 
   virtual unsigned sim_init_thread(kernel_info_t &kernel,
                                    ptx_thread_info **thread_info, int sid,
