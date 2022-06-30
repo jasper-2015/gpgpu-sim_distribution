@@ -1028,7 +1028,7 @@ void exec_shader_core_ctx::func_exec_inst(warp_inst_t &inst) {
   }
 }
 
-bool shader_core_ctx::has_register_space(const warp_inst_t *next_inst, unsigned warp_id) {
+bool shader_core_ctx::has_register_space(const warp_inst_t *next_inst, unsigned warp_id, unsigned long long curr_cycle) {
   printf("has_register_space parent is called!\n");
   return true;
 }
@@ -1071,7 +1071,7 @@ void shader_core_ctx::issue() {
   unsigned j;
   for (unsigned i = 0; i < schedulers.size(); i++) {
     j = (Issue_Prio + i) % schedulers.size();
-    schedulers[j]->cycle();
+    schedulers[j]->cycle(m_gpu->gpu_tot_sim_cycle +  m_gpu->gpu_sim_cycle);
   }
   Issue_Prio = (Issue_Prio + 1) % schedulers.size();
 
@@ -1196,7 +1196,7 @@ void scheduler_unit::order_by_priority(
   }
 }
 
-void scheduler_unit::cycle() {
+void scheduler_unit::cycle(unsigned long long curr_cycle) {
   SCHED_DPRINTF("scheduler_unit::cycle()\n");
   bool valid_inst =
       false;  // there was one warp with a valid instruction to issue (didn't
@@ -1425,7 +1425,7 @@ void scheduler_unit::cycle() {
                          !(diff_exec_units &&
                            previous_issued_inst_exec_type ==
                                exec_unit_type_t::SPECIALIZED) &&
-                          m_shader->has_register_space(pI, warp_id)) {
+                          m_shader->has_register_space(pI, warp_id, curr_cycle)) {
                 unsigned spec_id = pI->op - SPEC_UNIT_START_ID;
                 assert(spec_id < m_shader->m_config->m_specialized_unit.size());
                 register_set *spec_reg_set = m_spec_cores_out[spec_id];
