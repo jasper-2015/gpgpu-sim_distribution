@@ -1424,8 +1424,7 @@ void scheduler_unit::cycle(unsigned long long curr_cycle) {
               } else if ((pI->op >= SPEC_UNIT_START_ID) &&
                          !(diff_exec_units &&
                            previous_issued_inst_exec_type ==
-                               exec_unit_type_t::SPECIALIZED) &&
-                          m_shader->has_register_space(pI, warp_id, curr_cycle)) {
+                               exec_unit_type_t::SPECIALIZED)) {
                 unsigned spec_id = pI->op - SPEC_UNIT_START_ID;
                 assert(spec_id < m_shader->m_config->m_specialized_unit.size());
                 register_set *spec_reg_set = m_spec_cores_out[spec_id];
@@ -1435,7 +1434,8 @@ void scheduler_unit::cycle(unsigned long long curr_cycle) {
                     spec_reg_set->has_free(m_shader->m_config->sub_core_model,
                                            m_id);
 
-                if (spec_pipe_avail) {
+                if (spec_pipe_avail  &&
+                          m_shader->has_register_space(pI, warp_id, curr_cycle)) {
                   m_shader->issue_warp(*spec_reg_set, pI, active_mask, warp_id,
                                        m_id);
                   issued++;
