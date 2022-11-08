@@ -960,6 +960,8 @@ class inst_t {
       arch_reg.dst[i] = -1;
     }
     isize = 0;
+
+    mem_local_reg = false;
   }
   bool valid() const { return m_decoded; }
   virtual void print_insn(FILE *fp) const {
@@ -1002,6 +1004,9 @@ class inst_t {
   reduction_type red_type;
   unsigned bar_id;
   unsigned bar_count;
+
+  // Ni
+  bool mem_local_reg;
 
   types_of_operands oprnd_type;  // code (uarch visible) identify if the
                                  // operation is an interger or a floating point

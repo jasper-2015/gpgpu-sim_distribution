@@ -1948,7 +1948,7 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
   if (inst.accessq_empty()) return result;
 
   if (m_config->m_L1D_config.l1_latency > 0) {
-    if (inst.space.is_local() && (inst.is_load() || inst.is_store())) {
+    if (inst.mem_local_reg) {
       // Debug
       // if (m_sid == 0) {
       //   printf("local inst: 0x%llx, warp %u accessq count %u\n", inst.pc, inst.warp_id(), inst.accessq_count());
@@ -2042,6 +2042,7 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
 }
 
 void ldst_unit::L1_latency_queue_cycle() {
+  // printf("Before l1_no_bw_limit_queue size is %u\n", l1_no_bw_limit_queue.size());
   for (int j = 0; j < l1_no_bw_limit_queue.size(); j++) {
     if ((l1_no_bw_limit_queue[j]) != NULL) {  // Ni: Check TODO
       mem_fetch *mf_next = l1_no_bw_limit_queue[j];
@@ -2051,6 +2052,8 @@ void ldst_unit::L1_latency_queue_cycle() {
                         m_core->get_gpu()->gpu_sim_cycle +
                             m_core->get_gpu()->gpu_tot_sim_cycle,
                         events);
+      // if (m_sid == 0)
+      //   printf("Access for inst 0x%llx, warp %u\n", l1_no_bw_limit_queue[j]->get_inst().pc, l1_no_bw_limit_queue[j]->get_inst().warp_id());
 
       bool write_sent = was_write_sent(events);
       bool read_sent = was_read_sent(events);
@@ -2126,6 +2129,8 @@ void ldst_unit::L1_latency_queue_cycle() {
   for (int j = 0; j < l1_no_bw_limit_queue_temp.size(); j++) {
     l1_no_bw_limit_queue.push_back(l1_no_bw_limit_queue_temp[j]);
   }
+
+  // printf("After l1_no_bw_limit_queue size is %u\n", l1_no_bw_limit_queue.size());
 
   // Normal l1_latency_queue
   for (int j = 0; j < m_config->m_L1D_config.l1_banks; j++) {
@@ -2625,7 +2630,6 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
                          get_shader_normal_cache_id(), m_icnt, m_mf_allocator,
                          IN_L1D_MISS_QUEUE, core->get_gpu());
 
-    // Ni: Changed to MAX_WARP_SIZE because LDL and STL have max WARP_SIZE mem accesses
     l1_latency_queue.resize(m_config->m_L1D_config.l1_banks);
     assert(m_config->m_L1D_config.l1_latency > 0);
 
@@ -3578,6 +3582,7 @@ unsigned int shader_core_config::max_cta(const kernel_info_t &k) const {
     k.cache_config_set = true;
   }
 
+  // assert(m_L1D_config.get_total_size_inKB() == 128);
   // printf("GPGPU-Sim: Configure L1 cache to %uKB\n",
   //          m_L1D_config.get_total_size_inKB());
 
