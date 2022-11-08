@@ -1948,21 +1948,23 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
   if (inst.accessq_empty()) return result;
 
   if (m_config->m_L1D_config.l1_latency > 0) {
-    for (int j = 0; j < m_config->m_L1D_config.l1_banks;
-         j++) {  // We can handle at max l1_banks reqs per cycle
+    if (inst.space.is_local() && (inst.is_load() || inst.is_store())) {
+      // Debug
+      // if (m_sid == 0) {
+      //   printf("local inst: 0x%llx, warp %u accessq count %u\n", inst.pc, inst.warp_id(), inst.accessq_count());
+      //   printf("Before\n");
+      //   for (int i = 0; i < l1_no_bw_limit_queue.size(); i++) {
+      //     printf("inst 0x%llx, warp %u\n", l1_no_bw_limit_queue[i]->get_inst().pc, l1_no_bw_limit_queue[i]->get_inst().warp_id());
+      //   }
+      //   printf("\n");
+      // }
 
-      if (inst.accessq_empty()) return result;
-
-      mem_fetch *mf =
-          m_mf_allocator->alloc(inst, inst.accessq_back(),
-                                m_core->get_gpu()->gpu_sim_cycle +
-                                    m_core->get_gpu()->gpu_tot_sim_cycle);
-      unsigned bank_id = m_config->m_L1D_config.set_bank(mf->get_addr());
-      assert(bank_id < m_config->m_L1D_config.l1_banks);
-
-      if ((l1_latency_queue[bank_id][m_config->m_L1D_config.l1_latency - 1]) ==
-          NULL) {
-        l1_latency_queue[bank_id][m_config->m_L1D_config.l1_latency - 1] = mf;
+      while (inst.accessq_count() != 0) {
+        mem_fetch *mf =
+            m_mf_allocator->alloc(inst, inst.accessq_back(),
+                                  m_core->get_gpu()->gpu_sim_cycle +
+                                      m_core->get_gpu()->gpu_tot_sim_cycle);
+        l1_no_bw_limit_queue.push_back(mf);
 
         if (mf->get_inst().is_store()) {
           unsigned inc_ack =
@@ -1973,15 +1975,54 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
           for (unsigned i = 0; i < inc_ack; ++i)
             m_core->inc_store_req(inst.warp_id());
         }
-
         inst.accessq_pop_back();
-      } else {
-        result = BK_CONF;
-        delete mf;
-        break;  // do not try again, just break from the loop and try the next
-                // cycle
+      }
+
+      // if (m_sid == 0) {
+      //   printf("After\n");
+      //   for (int i = 0; i < l1_no_bw_limit_queue.size(); i++) {
+      //     printf("inst 0x%llx, warp %u\n", l1_no_bw_limit_queue[i]->get_inst().pc, l1_no_bw_limit_queue[i]->get_inst().warp_id());
+      //   }
+      //   printf("\n");
+      // }
+    }
+    else {
+      for (int j = 0; j <m_config->m_L1D_config.l1_banks;
+         j++) {  // We can handle at max l1_banks reqs per cycle
+
+        if (inst.accessq_empty()) return result;
+
+        mem_fetch *mf =
+            m_mf_allocator->alloc(inst, inst.accessq_back(),
+                                  m_core->get_gpu()->gpu_sim_cycle +
+                                      m_core->get_gpu()->gpu_tot_sim_cycle);
+        unsigned bank_id = m_config->m_L1D_config.set_bank(mf->get_addr());
+        assert(bank_id < m_config->m_L1D_config.l1_banks);
+
+        if ((l1_latency_queue[bank_id][m_config->m_L1D_config.l1_latency - 1]) ==
+            NULL) {
+          l1_latency_queue[bank_id][m_config->m_L1D_config.l1_latency - 1] = mf;
+
+          if (mf->get_inst().is_store()) {
+            unsigned inc_ack =
+                (m_config->m_L1D_config.get_mshr_type() == SECTOR_ASSOC)
+                    ? (mf->get_data_size() / SECTOR_SIZE)
+                    : 1;
+
+            for (unsigned i = 0; i < inc_ack; ++i)
+              m_core->inc_store_req(inst.warp_id());
+          }
+
+          inst.accessq_pop_back();
+        } else {
+          result = BK_CONF;
+          delete mf;
+          break;  // do not try again, just break from the loop and try the next
+                  // cycle
+        }
       }
     }
+    
     if (!inst.accessq_empty() && result != BK_CONF) result = COAL_STALL;
 
     return result;
@@ -2001,6 +2042,92 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
 }
 
 void ldst_unit::L1_latency_queue_cycle() {
+  for (int j = 0; j < l1_no_bw_limit_queue.size(); j++) {
+    if ((l1_no_bw_limit_queue[j]) != NULL) {  // Ni: Check TODO
+      mem_fetch *mf_next = l1_no_bw_limit_queue[j];
+      std::list<cache_event> events;
+      enum cache_request_status status =
+          m_L1D->access(mf_next->get_addr(), mf_next,
+                        m_core->get_gpu()->gpu_sim_cycle +
+                            m_core->get_gpu()->gpu_tot_sim_cycle,
+                        events);
+
+      bool write_sent = was_write_sent(events);
+      bool read_sent = was_read_sent(events);
+
+      if (status == HIT) {
+        assert(!read_sent);
+        l1_no_bw_limit_queue[j] = NULL;
+        if (mf_next->get_inst().is_load()) {
+          for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++)
+            if (mf_next->get_inst().out[r] > 0) {
+              assert(m_pending_writes[mf_next->get_inst().warp_id()]
+                                    [mf_next->get_inst().out[r]] > 0);
+              unsigned still_pending =
+                  --m_pending_writes[mf_next->get_inst().warp_id()]
+                                    [mf_next->get_inst().out[r]];
+              if (!still_pending) {
+                m_pending_writes[mf_next->get_inst().warp_id()].erase(
+                    mf_next->get_inst().out[r]);
+                m_scoreboard->releaseRegister(mf_next->get_inst().warp_id(),
+                                              mf_next->get_inst().out[r]);
+                m_core->warp_inst_complete(mf_next->get_inst());
+              }
+            }
+        }
+
+        // For write hit in WB policy
+        if (mf_next->get_inst().is_store() && !write_sent) {
+          unsigned dec_ack =
+              (m_config->m_L1D_config.get_mshr_type() == SECTOR_ASSOC)
+                  ? (mf_next->get_data_size() / SECTOR_SIZE)
+                  : 1;
+
+          mf_next->set_reply();
+
+          for (unsigned i = 0; i < dec_ack; ++i) m_core->store_ack(mf_next);
+        }
+
+        if (!write_sent) delete mf_next;
+
+      } else if (status == RESERVATION_FAIL) {
+        assert(!read_sent);
+        assert(!write_sent);
+      } else {
+        assert(status == MISS || status == HIT_RESERVED);
+        l1_no_bw_limit_queue[j] = NULL;
+        if (m_config->m_L1D_config.get_write_policy() != WRITE_THROUGH &&
+            mf_next->get_inst().is_store() &&
+            (m_config->m_L1D_config.get_write_allocate_policy() ==
+                FETCH_ON_WRITE ||
+            m_config->m_L1D_config.get_write_allocate_policy() ==
+                LAZY_FETCH_ON_READ) &&
+            !was_writeallocate_sent(events)) {
+          unsigned dec_ack =
+              (m_config->m_L1D_config.get_mshr_type() == SECTOR_ASSOC)
+                  ? (mf_next->get_data_size() / SECTOR_SIZE)
+                  : 1;
+          mf_next->set_reply();
+          for (unsigned i = 0; i < dec_ack; ++i) m_core->store_ack(mf_next);
+          if (!write_sent && !read_sent) delete mf_next;
+        }
+      }
+    }
+  }
+
+  // Move not NULL mfs to the front of the vector and adjust the size
+  std::vector<mem_fetch*> l1_no_bw_limit_queue_temp;
+  for (int j = 0; j < l1_no_bw_limit_queue.size(); j++) {
+    if (l1_no_bw_limit_queue[j] != NULL) {
+      l1_no_bw_limit_queue_temp.push_back(l1_no_bw_limit_queue[j]);
+    }
+  }
+  l1_no_bw_limit_queue.resize(0);
+  for (int j = 0; j < l1_no_bw_limit_queue_temp.size(); j++) {
+    l1_no_bw_limit_queue.push_back(l1_no_bw_limit_queue_temp[j]);
+  }
+
+  // Normal l1_latency_queue
   for (int j = 0; j < m_config->m_L1D_config.l1_banks; j++) {
     if ((l1_latency_queue[j][0]) != NULL) {
       mem_fetch *mf_next = l1_latency_queue[j][0];
@@ -2021,7 +2148,7 @@ void ldst_unit::L1_latency_queue_cycle() {
           for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++)
             if (mf_next->get_inst().out[r] > 0) {
               assert(m_pending_writes[mf_next->get_inst().warp_id()]
-                                     [mf_next->get_inst().out[r]] > 0);
+                                    [mf_next->get_inst().out[r]] > 0);
               unsigned still_pending =
                   --m_pending_writes[mf_next->get_inst().warp_id()]
                                     [mf_next->get_inst().out[r]];
@@ -2058,9 +2185,9 @@ void ldst_unit::L1_latency_queue_cycle() {
         if (m_config->m_L1D_config.get_write_policy() != WRITE_THROUGH &&
             mf_next->get_inst().is_store() &&
             (m_config->m_L1D_config.get_write_allocate_policy() ==
-                 FETCH_ON_WRITE ||
-             m_config->m_L1D_config.get_write_allocate_policy() ==
-                 LAZY_FETCH_ON_READ) &&
+                FETCH_ON_WRITE ||
+            m_config->m_L1D_config.get_write_allocate_policy() ==
+                LAZY_FETCH_ON_READ) &&
             !was_writeallocate_sent(events)) {
           unsigned dec_ack =
               (m_config->m_L1D_config.get_mshr_type() == SECTOR_ASSOC)
@@ -2074,12 +2201,13 @@ void ldst_unit::L1_latency_queue_cycle() {
     }
 
     for (unsigned stage = 0; stage < m_config->m_L1D_config.l1_latency - 1;
-         ++stage)
+        ++stage)
       if (l1_latency_queue[j][stage] == NULL) {
         l1_latency_queue[j][stage] = l1_latency_queue[j][stage + 1];
         l1_latency_queue[j][stage + 1] = NULL;
       }
   }
+  
 }
 
 bool ldst_unit::constant_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail,
@@ -2497,6 +2625,7 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
                          get_shader_normal_cache_id(), m_icnt, m_mf_allocator,
                          IN_L1D_MISS_QUEUE, core->get_gpu());
 
+    // Ni: Changed to MAX_WARP_SIZE because LDL and STL have max WARP_SIZE mem accesses
     l1_latency_queue.resize(m_config->m_L1D_config.l1_banks);
     assert(m_config->m_L1D_config.l1_latency > 0);
 
@@ -3448,6 +3577,9 @@ unsigned int shader_core_config::max_cta(const kernel_info_t &k) const {
 
     k.cache_config_set = true;
   }
+
+  // printf("GPGPU-Sim: Configure L1 cache to %uKB\n",
+  //          m_L1D_config.get_total_size_inKB());
 
   return result;
 }
