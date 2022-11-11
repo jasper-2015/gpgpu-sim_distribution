@@ -808,10 +808,17 @@ class cache_config {
     // set new assoc. L1 cache dynamically resized in Volta
     m_assoc = n;
   }
+  unsigned get_assoc() {
+    return m_assoc;
+  }
   unsigned get_nset() const {
     assert(m_valid);
     return m_nset;
   }
+  void set_nset(unsigned n) {
+    m_nset = n;
+  }
+
   unsigned get_total_size_inKB() const {
     assert(m_valid);
     return (m_assoc * m_nset * m_line_sz) / 1024;
@@ -904,6 +911,8 @@ class l1d_cache_config : public cache_config {
   unsigned l1_banks_byte_interleaving_log2;
   unsigned l1_banks_hashing_function;
   unsigned m_unified_cache_size;
+  unsigned m_l1l_nset_factor;
+
   virtual unsigned get_max_cache_multiplier() const {
     // set * assoc * cacheline size. Then convert Byte to KB
     // gpgpu_unified_cache_size is in KB while original_sz is in B

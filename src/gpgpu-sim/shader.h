@@ -1357,6 +1357,7 @@ class ldst_unit : public pipelined_simd_unit {
   void get_cache_stats(cache_stats &cs);
 
   void get_L1D_sub_stats(struct cache_sub_stats &css) const;
+  void get_L1L_sub_stats(struct cache_sub_stats &css) const;
   void get_L1C_sub_stats(struct cache_sub_stats &css) const;
   void get_L1T_sub_stats(struct cache_sub_stats &css) const;
 
@@ -1403,6 +1404,10 @@ class ldst_unit : public pipelined_simd_unit {
   tex_cache *m_L1T;        // texture cache
   read_only_cache *m_L1C;  // constant cache
   l1_cache *m_L1D;         // data cache
+
+  // Ni: Add a local cache
+  l1_cache* m_L1L;
+
   std::map<unsigned /*warp_id*/,
            std::map<unsigned /*regnum*/, unsigned /*count*/>>
       m_pending_writes;
@@ -1427,6 +1432,7 @@ class ldst_unit : public pipelined_simd_unit {
   std::vector<std::deque<mem_fetch *>> l1_latency_queue;
   std::vector<mem_fetch*> l1_no_bw_limit_queue;
   void L1_latency_queue_cycle();
+  void L1L_latency_queue_cycle();
 };
 
 enum pipeline_stage_name_t {
@@ -1517,6 +1523,13 @@ class shader_core_config : public core_config {
     m_L1T_config.init(m_L1T_config.m_config_string, FuncCachePreferNone);
     m_L1C_config.init(m_L1C_config.m_config_string, FuncCachePreferNone);
     m_L1D_config.init(m_L1D_config.m_config_string, FuncCachePreferNone);
+    m_L1L_config.init(m_L1D_config.m_config_string, FuncCachePreferNone);  // Ni: Change this when L1L config is introduced
+    m_L1L_config.set_nset(m_L1L_config.get_nset() / m_L1L_config.m_l1l_nset_factor);
+    m_L1L_config.set_assoc(4 * m_L1L_config.get_assoc());
+    printf("L1L: ");
+    m_L1L_config.print(stdout);
+    fflush(stdout);
+
     gpgpu_cache_texl1_linesize = m_L1T_config.get_line_sz();
     gpgpu_cache_constl1_linesize = m_L1C_config.get_line_sz();
     m_valid = true;
@@ -1590,6 +1603,9 @@ class shader_core_config : public core_config {
   mutable cache_config m_L1T_config;
   mutable cache_config m_L1C_config;
   mutable l1d_cache_config m_L1D_config;
+
+  // Ni: Add the local cache config
+  mutable l1d_cache_config m_L1L_config;
 
   bool gpgpu_dwf_reg_bankconflict;
 
@@ -2098,6 +2114,7 @@ class shader_core_ctx : public core_t {
   void get_cache_stats(cache_stats &cs);
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;
   void get_L1D_sub_stats(struct cache_sub_stats &css) const;
+  void get_L1L_sub_stats(struct cache_sub_stats &css) const;
   void get_L1C_sub_stats(struct cache_sub_stats &css) const;
   void get_L1T_sub_stats(struct cache_sub_stats &css) const;
 
@@ -2576,6 +2593,7 @@ class simt_core_cluster {
   void get_cache_stats(cache_stats &cs) const;
   void get_L1I_sub_stats(struct cache_sub_stats &css) const;
   void get_L1D_sub_stats(struct cache_sub_stats &css) const;
+  void get_L1L_sub_stats(struct cache_sub_stats &css) const;
   void get_L1C_sub_stats(struct cache_sub_stats &css) const;
   void get_L1T_sub_stats(struct cache_sub_stats &css) const;
 
