@@ -1968,7 +1968,11 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
             m_mf_allocator->alloc(inst, inst.accessq_back(),
                                   m_core->get_gpu()->gpu_sim_cycle +
                                       m_core->get_gpu()->gpu_tot_sim_cycle);
-        l1_no_bw_limit_queue.push_back(mf);
+        std::deque<mem_fetch*> mf_latency_queue;
+        mf_latency_queue.resize(m_config->m_L1D_config.l1_latency,
+                                (mem_fetch*)NULL);  // Ni: change this config if needed TODO
+        mf_latency_queue[m_config->m_L1D_config.l1_latency-1] = mf;
+        l1_no_bw_limit_queue.push_back(mf_latency_queue);
 
         if (mf->get_inst().is_store()) {
           unsigned inc_ack =
@@ -2132,8 +2136,8 @@ void ldst_unit::L1_latency_queue_cycle() {
 void ldst_unit::L1L_latency_queue_cycle() {
 // printf("Before l1_no_bw_limit_queue size is %u\n", l1_no_bw_limit_queue.size());
   for (int j = 0; j < l1_no_bw_limit_queue.size(); j++) {
-    if ((l1_no_bw_limit_queue[j]) != NULL) { 
-      mem_fetch *mf_next = l1_no_bw_limit_queue[j];
+    if ((l1_no_bw_limit_queue[j][0]) != NULL) { 
+      mem_fetch *mf_next = l1_no_bw_limit_queue[j][0];
       std::list<cache_event> events;
       enum cache_request_status status =
           m_L1L->access(mf_next->get_addr(), mf_next,
@@ -2148,7 +2152,7 @@ void ldst_unit::L1L_latency_queue_cycle() {
 
       if (status == HIT) {
         assert(!read_sent);
-        l1_no_bw_limit_queue[j] = NULL;
+        l1_no_bw_limit_queue[j][0] = NULL;
         if (mf_next->get_inst().is_load()) {
           for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++)
             if (mf_next->get_inst().out[r] > 0) {
@@ -2186,7 +2190,7 @@ void ldst_unit::L1L_latency_queue_cycle() {
         assert(!write_sent);
       } else {
         assert(status == MISS || status == HIT_RESERVED);
-        l1_no_bw_limit_queue[j] = NULL;
+        l1_no_bw_limit_queue[j][0] = NULL;
         if (m_config->m_L1D_config.get_write_policy() != WRITE_THROUGH &&
             mf_next->get_inst().is_store() &&
             (m_config->m_L1D_config.get_write_allocate_policy() ==
@@ -2204,13 +2208,23 @@ void ldst_unit::L1L_latency_queue_cycle() {
         }
       }
     }
+    for (unsigned stage = 0; stage < m_config->m_L1D_config.l1_latency - 1;
+      ++stage) {
+      if (l1_no_bw_limit_queue[j][stage] == NULL) {
+        l1_no_bw_limit_queue[j][stage] = l1_no_bw_limit_queue[j][stage + 1];
+        l1_no_bw_limit_queue[j][stage + 1] = NULL;
+      }
+    }
   }
 
   // Move not NULL mfs to the front of the vector and adjust the size
-  std::vector<mem_fetch*> l1_no_bw_limit_queue_temp;
+  std::vector<std::deque<mem_fetch*>> l1_no_bw_limit_queue_temp;
   for (int j = 0; j < l1_no_bw_limit_queue.size(); j++) {
-    if (l1_no_bw_limit_queue[j] != NULL) {
-      l1_no_bw_limit_queue_temp.push_back(l1_no_bw_limit_queue[j]);
+    for (int k = 0; k < m_config->m_L1D_config.l1_latency; k++) {
+      if (l1_no_bw_limit_queue[j][k] != NULL) {
+        l1_no_bw_limit_queue_temp.push_back(l1_no_bw_limit_queue[j]);
+        break;
+      }
     }
   }
   l1_no_bw_limit_queue.resize(0);

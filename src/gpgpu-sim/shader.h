@@ -1430,7 +1430,7 @@ class ldst_unit : public pipelined_simd_unit {
   unsigned long long m_last_inst_gpu_tot_sim_cycle;
 
   std::vector<std::deque<mem_fetch *>> l1_latency_queue;
-  std::vector<mem_fetch*> l1_no_bw_limit_queue;
+  std::vector<std::deque<mem_fetch*>> l1_no_bw_limit_queue;
   void L1_latency_queue_cycle();
   void L1L_latency_queue_cycle();
 };
