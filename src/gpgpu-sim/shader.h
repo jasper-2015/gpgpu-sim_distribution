@@ -2047,6 +2047,9 @@ class shader_core_ctx : public core_t {
                   const shader_core_config *config,
                   const memory_config *mem_config, shader_core_stats *stats);
 
+  // Ni: Max # of local accesses per instruction
+  unsigned m_max_local_accesses;
+
   // used by simt_core_cluster:
   // modifiers
   void cycle();

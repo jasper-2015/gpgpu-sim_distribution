@@ -54,6 +54,8 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
+unsigned max_local_accesses = 0;
+
 mem_fetch *shader_core_mem_fetch_allocator::alloc(
     new_addr_type addr, mem_access_type type, unsigned size, bool wr,
     unsigned long long cycle) const {
@@ -493,6 +495,9 @@ shader_core_ctx::shader_core_ctx(class gpgpu_sim *gpu,
 
   m_last_inst_gpu_sim_cycle = 0;
   m_last_inst_gpu_tot_sim_cycle = 0;
+
+  // Ni: Initialization
+  m_max_local_accesses = 0;
 
   // Jin: for concurrent kernels on a SM
   m_occupied_n_threads = 0;
@@ -961,6 +966,11 @@ void shader_core_ctx::fetch() {
               did_exit = true;
             }
           }
+          if (m_max_local_accesses > 4) {
+            printf("Max # of local accesses for core %u is %u\n", m_sid, m_max_local_accesses);
+            fflush(stdout);
+          }
+
           if (did_exit) m_warp[warp_id]->set_done_exit();
           --m_active_warps;
           assert(m_active_warps >= 0);
@@ -1962,6 +1972,9 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
       //   }
       //   printf("\n");
       // }
+      if (inst.accessq_count() > m_core->m_max_local_accesses) {
+        m_core->m_max_local_accesses = inst.accessq_count();
+      }
 
       while (inst.accessq_count() != 0) {
         mem_fetch *mf =
