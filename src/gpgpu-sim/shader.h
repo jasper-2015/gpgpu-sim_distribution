@@ -1524,7 +1524,7 @@ class shader_core_config : public core_config {
     m_L1C_config.init(m_L1C_config.m_config_string, FuncCachePreferNone);
     m_L1D_config.init(m_L1D_config.m_config_string, FuncCachePreferNone);
     m_L1L_config.init(m_L1D_config.m_config_string, FuncCachePreferNone);  // Ni: Change this when L1L config is introduced
-    m_L1L_config.set_nset(m_L1L_config.get_nset() / m_L1L_config.m_l1l_nset_factor);
+    m_L1L_config.set_nset(4* m_L1L_config.get_nset() / m_L1L_config.m_l1l_nset_factor);
     m_L1L_config.set_assoc(4 * m_L1L_config.get_assoc());
     printf("L1L: ");
     m_L1L_config.print(stdout);

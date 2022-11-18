@@ -1976,18 +1976,18 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
         m_core->m_max_local_accesses = inst.accessq_count();
       }
 
-      while (inst.accessq_count() != 0) {
-        mem_fetch *mf =
+      for (int j = 0; j <m_config->m_L1D_config.l1_banks;
+         j++) {  // We can handle at max l1_banks reqs per cycle
+
+        if (inst.accessq_empty()) return result;
+
+        if (l1_no_bw_limit_queue[j][m_config->m_L1D_config.l1_latency-1] == NULL) {
+          mem_fetch *mf =
             m_mf_allocator->alloc(inst, inst.accessq_back(),
                                   m_core->get_gpu()->gpu_sim_cycle +
                                       m_core->get_gpu()->gpu_tot_sim_cycle);
-        std::deque<mem_fetch*> mf_latency_queue;
-        mf_latency_queue.resize(m_config->m_L1D_config.l1_latency,
-                                (mem_fetch*)NULL);  // Ni: change this config if needed TODO
-        mf_latency_queue[m_config->m_L1D_config.l1_latency-1] = mf;
-        l1_no_bw_limit_queue.push_back(mf_latency_queue);
-
-        if (mf->get_inst().is_store()) {
+          l1_no_bw_limit_queue[j][m_config->m_L1D_config.l1_latency-1] = mf;
+          if (mf->get_inst().is_store()) {
           unsigned inc_ack =
               (m_config->m_L1D_config.get_mshr_type() == SECTOR_ASSOC)
                   ? (mf->get_data_size() / SECTOR_SIZE)
@@ -1995,8 +1995,9 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
 
           for (unsigned i = 0; i < inc_ack; ++i)
             m_core->inc_store_req(inst.warp_id());
+          }
+          inst.accessq_pop_back();
         }
-        inst.accessq_pop_back();
       }
 
       // if (m_sid == 0) {
@@ -2147,7 +2148,11 @@ void ldst_unit::L1_latency_queue_cycle() {
 }
 
 void ldst_unit::L1L_latency_queue_cycle() {
-// printf("Before l1_no_bw_limit_queue size is %u\n", l1_no_bw_limit_queue.size());
+  // if (m_sid == 0) {
+  //   printf("Before l1_no_bw_limit_queue size is %u\n", l1_no_bw_limit_queue.size());
+  // }
+  
+  assert(l1_no_bw_limit_queue.size() == m_config->m_L1D_config.l1_banks);
   for (int j = 0; j < l1_no_bw_limit_queue.size(); j++) {
     if ((l1_no_bw_limit_queue[j][0]) != NULL) { 
       mem_fetch *mf_next = l1_no_bw_limit_queue[j][0];
@@ -2165,6 +2170,9 @@ void ldst_unit::L1L_latency_queue_cycle() {
 
       if (status == HIT) {
         assert(!read_sent);
+        // if (m_sid == 0) {
+        //   printf("HIT remove 1\n"); 
+        // }
         l1_no_bw_limit_queue[j][0] = NULL;
         if (mf_next->get_inst().is_load()) {
           for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++)
@@ -2199,11 +2207,17 @@ void ldst_unit::L1L_latency_queue_cycle() {
         if (!write_sent) delete mf_next;
 
       } else if (status == RESERVATION_FAIL) {
+        // if (m_sid == 0) {
+        //   printf("Reservation Fail\n");
+        // }
         assert(!read_sent);
         assert(!write_sent);
       } else {
         assert(status == MISS || status == HIT_RESERVED);
         l1_no_bw_limit_queue[j][0] = NULL;
+        // if (m_sid == 0){
+        //   printf("MISS/HIT_RESERVED remove 1\n");
+        // }
         if (m_config->m_L1D_config.get_write_policy() != WRITE_THROUGH &&
             mf_next->get_inst().is_store() &&
             (m_config->m_L1D_config.get_write_allocate_policy() ==
@@ -2231,21 +2245,23 @@ void ldst_unit::L1L_latency_queue_cycle() {
   }
 
   // Move not NULL mfs to the front of the vector and adjust the size
-  std::vector<std::deque<mem_fetch*>> l1_no_bw_limit_queue_temp;
-  for (int j = 0; j < l1_no_bw_limit_queue.size(); j++) {
-    for (int k = 0; k < m_config->m_L1D_config.l1_latency; k++) {
-      if (l1_no_bw_limit_queue[j][k] != NULL) {
-        l1_no_bw_limit_queue_temp.push_back(l1_no_bw_limit_queue[j]);
-        break;
-      }
-    }
-  }
-  l1_no_bw_limit_queue.resize(0);
-  for (int j = 0; j < l1_no_bw_limit_queue_temp.size(); j++) {
-    l1_no_bw_limit_queue.push_back(l1_no_bw_limit_queue_temp[j]);
-  }
+  // std::vector<std::deque<mem_fetch*>> l1_no_bw_limit_queue_temp;
+  // for (int j = 0; j < l1_no_bw_limit_queue.size(); j++) {
+  //   for (int k = 0; k < m_config->m_L1D_config.l1_latency; k++) {
+  //     if (l1_no_bw_limit_queue[j][k] != NULL) {
+  //       l1_no_bw_limit_queue_temp.push_back(l1_no_bw_limit_queue[j]);
+  //       break;
+  //     }
+  //   }
+  // }
+  // l1_no_bw_limit_queue.resize(0);
+  // for (int j = 0; j < l1_no_bw_limit_queue_temp.size(); j++) {
+  //   l1_no_bw_limit_queue.push_back(l1_no_bw_limit_queue_temp[j]);
+  // }
 
-  // printf("After l1_no_bw_limit_queue size is %u\n", l1_no_bw_limit_queue.size());
+  // if (m_sid == 0) {
+  //   printf("After l1_no_bw_limit_queue size is %u\n", l1_no_bw_limit_queue.size());
+  // }
 }
 
 bool ldst_unit::constant_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail,
@@ -2678,6 +2694,13 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
 
     for (unsigned j = 0; j < m_config->m_L1D_config.l1_banks; j++)
       l1_latency_queue[j].resize(m_config->m_L1D_config.l1_latency,
+                                 (mem_fetch *)NULL);
+
+    l1_no_bw_limit_queue.resize(m_config->m_L1D_config.l1_banks);
+    assert(m_config->m_L1D_config.l1_latency > 0);
+
+    for (unsigned j = 0; j < m_config->m_L1D_config.l1_banks; j++)
+      l1_no_bw_limit_queue[j].resize(m_config->m_L1D_config.l1_latency,
                                  (mem_fetch *)NULL);
   }
   m_name = "MEM ";
