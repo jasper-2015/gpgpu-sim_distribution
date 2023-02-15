@@ -1146,6 +1146,9 @@ struct cache_sub_stats_pw {
   unsigned read_pending_hits;
   unsigned read_res_fails;
 
+  // Ni: Added for histo of set access of L1L
+  unsigned long L1L_set_access[8];
+
   cache_sub_stats_pw() { clear(); }
   void clear() {
     accesses = 0;
@@ -1157,6 +1160,9 @@ struct cache_sub_stats_pw {
     read_hits = 0;
     read_pending_hits = 0;
     read_res_fails = 0;
+    for (unsigned i = 0; i < 8; i++) {
+      L1L_set_access[i] = 0;
+    }
   }
   cache_sub_stats_pw &operator+=(const cache_sub_stats_pw &css) {
     ///
@@ -1169,6 +1175,9 @@ struct cache_sub_stats_pw {
     read_pending_hits += css.read_pending_hits;
     write_res_fails += css.write_res_fails;
     read_res_fails += css.read_res_fails;
+    for (unsigned i = 0; i < 8; i++) {
+      L1L_set_access[i] += css.L1L_set_access[i];
+    }
     return *this;
   }
 
@@ -1184,6 +1193,9 @@ struct cache_sub_stats_pw {
     ret.read_pending_hits = read_pending_hits + cs.read_pending_hits;
     ret.write_res_fails = write_res_fails + cs.write_res_fails;
     ret.read_res_fails = read_res_fails + cs.read_res_fails;
+    for (unsigned i = 0; i < 8; i++) {
+      ret.L1L_set_access[i] = L1L_set_access[i] + cs.L1L_set_access[i];
+    }
     return ret;
   }
 };

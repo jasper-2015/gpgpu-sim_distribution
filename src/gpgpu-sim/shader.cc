@@ -2162,6 +2162,17 @@ void ldst_unit::L1L_latency_queue_cycle() {
                         m_core->get_gpu()->gpu_sim_cycle +
                             m_core->get_gpu()->gpu_tot_sim_cycle,
                         events);
+      new_addr_type block_addr = m_config->m_L1L_config.block_addr(mf_next->get_addr());
+      unsigned set_index = m_config->m_L1L_config.set_index(block_addr);
+      if (set_index > m_config->m_L1L_config.get_nset()) {
+        printf("Wrong # sets for L1L cache!!\n");
+        assert(set_index <= m_config->m_L1L_config.get_nset());
+      }
+      L1L_set_access[set_index]++;
+      if (status == RESERVATION_FAIL) {
+        L1L_set_resfail[set_index]++;
+      }
+      // enum cache_request_status status = HIT;
       // if (m_sid == 0)
       //   printf("Access for inst 0x%llx, warp %u\n", l1_no_bw_limit_queue[j]->get_inst().pc, l1_no_bw_limit_queue[j]->get_inst().warp_id());
 
@@ -2702,6 +2713,11 @@ ldst_unit::ldst_unit(mem_fetch_interface *icnt,
     for (unsigned j = 0; j < m_config->m_L1D_config.l1_banks; j++)
       l1_no_bw_limit_queue[j].resize(m_config->m_L1D_config.l1_latency,
                                  (mem_fetch *)NULL);
+
+    for (unsigned j = 0; j < 8; j++) {
+      L1L_set_access[j] = 0;
+      L1L_set_resfail[j] = 0;
+    }
   }
   m_name = "MEM ";
 }
@@ -3194,6 +3210,12 @@ void gpgpu_sim::shader_print_cache_stats(FILE *fout) const {
   }
 
   // L1L
+  unsigned long L1L_tot_accesses[8];
+  unsigned long L1L_tot_resfail[8];
+  for (unsigned i = 0; i < 8; i++) {
+    L1L_tot_accesses[i] = 0;
+    L1L_tot_resfail[i] = 0;
+  }
   if (!m_shader_config->m_L1L_config.disabled()) {
     total_css.clear();
     css.clear();
@@ -3207,6 +3229,12 @@ void gpgpu_sim::shader_print_cache_stats(FILE *fout) const {
               i, css.accesses, css.misses,
               (double)css.misses / (double)css.accesses, css.pending_hits,
               css.res_fails);
+      for (unsigned j = 0; j < 8; j++) {
+        fprintf(stdout, "\tL1L_set_access[%d]: %lu \tresfail: %lu\n", j, m_cluster[i]->L1L_set_access[j], 
+                        m_cluster[i]->L1L_set_resfail[j]);
+        L1L_tot_accesses[j] += m_cluster[i]->L1L_set_access[j];
+        L1L_tot_resfail[j] += m_cluster[i]->L1L_set_resfail[j];
+      }
 
       total_css += css;
     }
@@ -3221,6 +3249,11 @@ void gpgpu_sim::shader_print_cache_stats(FILE *fout) const {
     fprintf(fout, "\tL1L_total_cache_reservation_fails = %llu\n",
             total_css.res_fails);
     total_css.print_port_stats(fout, "\tL1L_cache");
+
+    fprintf(fout, "\tL1L_tot_set_accesses:\n");
+    for (unsigned i = 0; i < 8; i++) {
+      fprintf(fout, "\t\tset %d = %lu \tresfail: %lu\n", i, L1L_tot_accesses[i], L1L_tot_resfail[i]);
+    }
   }
 
   // L1C
@@ -4145,8 +4178,12 @@ void shader_core_ctx::get_L1I_sub_stats(struct cache_sub_stats &css) const {
 void shader_core_ctx::get_L1D_sub_stats(struct cache_sub_stats &css) const {
   m_ldst_unit->get_L1D_sub_stats(css);
 }
-void shader_core_ctx::get_L1L_sub_stats(struct cache_sub_stats &css) const {
+void shader_core_ctx::get_L1L_sub_stats(struct cache_sub_stats &css) {
   m_ldst_unit->get_L1L_sub_stats(css);
+  for (unsigned i = 0; i < 8; i++) {
+    L1L_set_access[i] = m_ldst_unit->L1L_set_access[i];
+    L1L_set_resfail[i] = m_ldst_unit->L1L_set_resfail[i];
+  }
 }
 void shader_core_ctx::get_L1C_sub_stats(struct cache_sub_stats &css) const {
   m_ldst_unit->get_L1C_sub_stats(css);
@@ -4850,14 +4887,24 @@ void simt_core_cluster::get_L1D_sub_stats(struct cache_sub_stats &css) const {
   }
   css = total_css;
 }
-void simt_core_cluster::get_L1L_sub_stats(struct cache_sub_stats &css) const {
+void simt_core_cluster::get_L1L_sub_stats(struct cache_sub_stats &css) {
   struct cache_sub_stats temp_css;
   struct cache_sub_stats total_css;
   temp_css.clear();
   total_css.clear();
+
+  for (unsigned j = 0; j < 8; j++) {
+    L1L_set_access[j] = 0;
+    L1L_set_resfail[j] = 0;
+  }
+
   for (unsigned i = 0; i < m_config->n_simt_cores_per_cluster; ++i) {
     m_core[i]->get_L1L_sub_stats(temp_css);
     total_css += temp_css;
+    for (unsigned j = 0; j < 8; j++) {
+      L1L_set_access[j] += m_core[i]->L1L_set_access[j];
+      L1L_set_resfail[j] += m_core[i]->L1L_set_resfail[j];
+    }
   }
   css = total_css;
 }
