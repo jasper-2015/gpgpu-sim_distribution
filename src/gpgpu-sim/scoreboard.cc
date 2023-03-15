@@ -73,6 +73,16 @@ void Scoreboard::releaseRegister(unsigned wid, unsigned regnum) {
   if (!(reg_table[wid].find(regnum) != reg_table[wid].end())) return;
   SHADER_DPRINTF(SCOREBOARD, "Release register - warp:%d, reg: %d\n", wid,
                  regnum);
+  // if (get_sid() == 79 && wid == 0)
+    // printf("Release register %u, SM %u, warp %u\n", regnum,
+    //       get_sid(), wid);
+  // std::set<unsigned>::iterator it;
+  // it = reg_table[wid].find(regnum);
+  // if (it == reg_table[wid].end()) {
+  //   printf("Problem at Release register %u, SM %u, warp %u\n", regnum,
+  //         get_sid(), wid);
+  //   fflush(stdout);
+  // }
   reg_table[wid].erase(regnum);
 }
 
@@ -83,6 +93,9 @@ const bool Scoreboard::islongop(unsigned warp_id, unsigned regnum) {
 void Scoreboard::reserveRegisters(const class warp_inst_t* inst) {
   for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++) {
     if (inst->out[r] > 0) {
+      // if (get_sid() == 79 && inst->warp_id() == 0)
+        // printf("Reserve register %u inst 0x%llx, SM %u, warp %u\n", inst->out[r], inst->pc, 
+        //       get_sid(), inst->warp_id());
       reserveRegister(inst->warp_id(), inst->out[r]);
       SHADER_DPRINTF(SCOREBOARD, "Reserved register - warp:%d, reg: %d\n",
                      inst->warp_id(), inst->out[r]);
@@ -112,6 +125,8 @@ void Scoreboard::releaseRegisters(const class warp_inst_t* inst) {
     if (inst->out[r] > 0) {
       SHADER_DPRINTF(SCOREBOARD, "Register Released - warp:%d, reg: %d\n",
                      inst->warp_id(), inst->out[r]);
+      // printf("Release register %u inst 0x%llx, SM %u, warp %u\n", inst->out[r], inst->pc, 
+      //         get_sid(), inst->warp_id());
       releaseRegister(inst->warp_id(), inst->out[r]);
       longopregs[inst->warp_id()].erase(inst->out[r]);
     }

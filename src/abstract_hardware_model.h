@@ -934,6 +934,7 @@ class inst_t {
   inst_t() {
     m_decoded = false;
     pc = (address_type)-1;
+    a_pc = (address_type)-1;
     reconvergence_pc = (address_type)-1;
     op = NO_OP;
     bar_type = NOT_BAR;
@@ -995,6 +996,7 @@ class inst_t {
   void set_bar_count(unsigned count) { bar_count = count; }
 
   address_type pc;  // program counter address of instruction
+  address_type a_pc; // Ni: absolute pc
   unsigned isize;   // size of instruction in bytes
   op_type op;       // opcode (uarch visible)
 
@@ -1069,9 +1071,15 @@ class warp_inst_t : public inst_t {
     m_is_printf = false;
     m_is_cdp = 0;
     should_do_atomic = true;
+
+    // Ni
+    mem_local_reg = false;
   }
   virtual ~warp_inst_t() {}
 
+  public:
+    bool mem_local_reg;
+    
   // modifiers
   void broadcast_barrier_reduction(const active_mask_t &access_mask);
   void do_atomic(bool forceDo = false);

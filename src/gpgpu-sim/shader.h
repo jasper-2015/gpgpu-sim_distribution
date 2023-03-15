@@ -2496,6 +2496,9 @@ class shader_core_ctx : public core_t {
   void release_shader_resource_1block(unsigned hw_ctaid, kernel_info_t &kernel);
   int find_available_hwtid(unsigned int cta_size, bool occupy);
 
+  // Ni
+  std::vector<unsigned> m_alloc_fail_record;
+
  private:
   unsigned int m_occupied_n_threads;
   unsigned int m_occupied_shmem;
