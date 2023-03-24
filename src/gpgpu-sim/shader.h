@@ -2498,6 +2498,9 @@ class shader_core_ctx : public core_t {
 
   // Ni
   std::vector<unsigned> m_alloc_fail_record;
+  std::vector<unsigned> total_func_call;
+  std::vector<unsigned> func_call_spf;
+  std::vector<unsigned long long> byte_spf;
 
  private:
   unsigned int m_occupied_n_threads;

@@ -54,8 +54,8 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
-#define SID 49
-#define WID 9
+#define SID 44
+#define WID 1
 
 mem_fetch *shader_core_mem_fetch_allocator::alloc(
     new_addr_type addr, mem_access_type type, unsigned size, bool wr,
@@ -507,8 +507,14 @@ shader_core_ctx::shader_core_ctx(class gpgpu_sim *gpu,
 
   // Ni: whether static rf allocation fails
   m_alloc_fail_record.resize(m_config->max_warps_per_shader);
+  total_func_call.resize(m_config->max_warps_per_shader);
+  func_call_spf.resize(m_config->max_warps_per_shader);
+  byte_spf.resize(m_config->max_warps_per_shader);
   for (unsigned k = 0; k < m_config->max_warps_per_shader; ++k) {
     m_alloc_fail_record[k] = 0;
+    total_func_call[k] = 0;
+    func_call_spf[k] = 0;
+    byte_spf[k] = 0;
   }
 }
 
@@ -1049,9 +1055,12 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
                                  const warp_inst_t *next_inst,
                                  const active_mask_t &active_mask,
                                  unsigned warp_id, unsigned sch_id) {
-  if (get_sid() == SID && warp_id == WID && next_inst->mem_local_reg) {
-    printf("Issued instr 0x%llx\n", next_inst->pc);
-  }
+  // if (get_sid() == SID && warp_id == WID/* && next_inst->mem_local_reg*/) {
+  //   printf("Issued instr 0x%llx\n", next_inst->pc);
+  // }
+  // if (next_inst->mem_local_reg) {
+  //   byte_spf[warp_id] += (active_mask.count() * 4);
+  // }
   warp_inst_t **pipe_reg =
       pipe_reg_set.get_free(m_config->sub_core_model, sch_id);
   assert(pipe_reg);
@@ -1285,16 +1294,16 @@ void scheduler_unit::cycle(unsigned long long curr_cycle) {
           warp(warp_id).ibuffer_flush();
         } else {
           // Ni: ignore reg spills & fills
-          if (pI->mem_local_reg && m_shader->m_alloc_fail_record[warp_id] == 0) {
-            warp(warp_id).ibuffer_free();
-            warp(warp_id).set_next_pc(pI->pc + pI->isize);
-            warp(warp_id).ibuffer_step();
-            warp(warp_id).dec_inst_in_pipeline();
-            if (get_sid() == SID && warp_id == WID)
-              printf("local ignored addr 0x%llx\n", pc);
-            fflush(stdout);
-            continue;
-          }
+          // if (pI->mem_local_reg && m_shader->m_alloc_fail_record[warp_id] == 0) {
+          //   warp(warp_id).ibuffer_free();
+          //   warp(warp_id).set_next_pc(pI->pc + pI->isize);
+          //   warp(warp_id).ibuffer_step();
+          //   warp(warp_id).dec_inst_in_pipeline();
+          //   if (get_sid() == SID && warp_id == WID)
+          //     printf("local ignored addr 0x%llx\n", pc);
+          //   fflush(stdout);
+          //   continue;
+          // }
 
           valid_inst = true;
           if (!m_scoreboard->checkCollision(warp_id, pI)) {
