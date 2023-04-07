@@ -904,6 +904,11 @@ void shader_core_ctx::decode() {
   if (m_inst_fetch_buffer.m_valid) {
     // decode 1 or 2 instructions and place them into ibuffer
     address_type pc = m_inst_fetch_buffer.m_pc;
+    if (m_inst_fetch_buffer.m_warp_id > 63) {
+      printf("warp_id for fetch buffer: %u\n", m_inst_fetch_buffer.m_warp_id);
+      fflush(stdout);
+    }
+    assert(m_inst_fetch_buffer.m_warp_id <= 63);
     const warp_inst_t *pI1 = get_next_inst(m_inst_fetch_buffer.m_warp_id, pc);
     m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill(0, pI1);
     m_warp[m_inst_fetch_buffer.m_warp_id]->inc_inst_in_pipeline();
@@ -917,6 +922,9 @@ void shader_core_ctx::decode() {
       const warp_inst_t *pI2 =
           get_next_inst(m_inst_fetch_buffer.m_warp_id, pc + pI1->isize);
       if (pI2) {
+        // printf("decode %llx, warp %u, shader %u\n", pI2->a_pc, 
+        //       m_inst_fetch_buffer.m_warp_id, get_sid());
+        // fflush(stdout);
         m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill(1, pI2);
         m_warp[m_inst_fetch_buffer.m_warp_id]->inc_inst_in_pipeline();
         m_stats->m_num_decoded_insn[m_sid]++;
@@ -1051,6 +1059,10 @@ bool shader_core_ctx::has_register_space(const warp_inst_t *next_inst, unsigned 
   return true;
 }
 
+void shader_core_ctx::window_kickoff(const warp_inst_t *next_inst, unsigned warp_id) {
+  printf("window_kickoff parent is called!\n");
+}
+
 void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
                                  const warp_inst_t *next_inst,
                                  const active_mask_t &active_mask,
@@ -1058,9 +1070,10 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
   // if (get_sid() == SID && warp_id == WID/* && next_inst->mem_local_reg*/) {
   //   printf("Issued instr 0x%llx\n", next_inst->pc);
   // }
-  // if (next_inst->mem_local_reg) {
-  //   byte_spf[warp_id] += (active_mask.count() * 4);
-  // }
+  window_kickoff(next_inst, warp_id);
+  if (next_inst->mem_local_reg) {
+    byte_spf[warp_id] += (active_mask.count() * 4);
+  }
   warp_inst_t **pipe_reg =
       pipe_reg_set.get_free(m_config->sub_core_model, sch_id);
   assert(pipe_reg);
@@ -1462,6 +1475,12 @@ void scheduler_unit::cycle(unsigned long long curr_cycle) {
                            previous_issued_inst_exec_type ==
                                exec_unit_type_t::SPECIALIZED)) {
                 unsigned spec_id = pI->op - SPEC_UNIT_START_ID;
+                if (spec_id >= m_shader->m_config->m_specialized_unit.size()) {
+                  printf("a_pc: %llx\n", pI->a_pc);
+                  printf("spec_id: %u, size: %u\n", spec_id, 
+                          m_shader->m_config->m_specialized_unit.size());
+                  fflush(stdout);
+                }
                 assert(spec_id < m_shader->m_config->m_specialized_unit.size());
                 register_set *spec_reg_set = m_spec_cores_out[spec_id];
                 bool spec_pipe_avail =

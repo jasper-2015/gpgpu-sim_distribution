@@ -1640,6 +1640,7 @@ class shader_core_config : public core_config {
   bool gpgpu_local_mem_map;
   bool gpgpu_ignore_resources_limitation;
   bool sub_core_model;
+  unsigned gpgpu_regchunk;
 
   unsigned max_sp_latency;
   unsigned max_int_latency;
@@ -2388,6 +2389,7 @@ class shader_core_ctx : public core_t {
   virtual void func_exec_inst(warp_inst_t &inst) = 0;
 
   virtual bool has_register_space(const warp_inst_t *pI, unsigned warp_id, unsigned long long curr_cycle);
+  virtual void window_kickoff(const warp_inst_t *pI, unsigned warp_id);
 
   virtual unsigned sim_init_thread(kernel_info_t &kernel,
                                    ptx_thread_info **thread_info, int sid,
