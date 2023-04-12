@@ -2430,7 +2430,7 @@ unsigned max_cta(const struct gpgpu_ptx_sim_info *kernel_info,
 
   unsigned result = result_thread;
   result = gs_min2(result, result_shmem);
-  result = gs_min2(result, result_regs);
+  // result = gs_min2(result, result_regs);
   result = gs_min2(result, result_cta);
 
   printf("GPGPU-Sim uArch: CTA/core = %u, limited by:", result);
