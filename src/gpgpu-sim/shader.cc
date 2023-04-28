@@ -3427,7 +3427,7 @@ unsigned int shader_core_config::max_cta(const kernel_info_t &k) const {
 
   unsigned result = result_thread;
   result = gs_min2(result, result_shmem);
-  // result = gs_min2(result, result_regs);
+  result = gs_min2(result, result_regs);
   result = gs_min2(result, result_cta);
 
   static const struct gpgpu_ptx_sim_info *last_kinfo = NULL;
